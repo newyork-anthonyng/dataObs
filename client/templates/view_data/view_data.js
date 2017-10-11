@@ -57,7 +57,7 @@ Template.viewData.helpers({
 Template.viewData.events({
 
   'click .reset-button': function (e) {
-    location.reload()  
+    location.reload()
   },
 
   'click .help-button': function (e) {
@@ -68,13 +68,14 @@ Template.viewData.events({
   },
   'click .modal-card-foot .button': function(e) {
     $('#help-env-modal').removeClass("is-active");
-  },   
+  },
 
   'click .generate-button': function (e) {
     // Get classroom, obs, and all params.
     obsIds = [];
     dParams = [];
     sParams = [];
+
     envId = $('.env-selection .chosen').attr('data_id');
     $('.obs-selection .chosen').each(function () { obsIds.push($(this).attr('data_id')) });
     $('.dparam-selection .chosen').each(function () { dParams.push($(this).attr('data_id')) });
@@ -84,15 +85,15 @@ Template.viewData.events({
     demData = makeDemGraphs(envId, dParams);
     groupCData = makeContributionGraphs(obsIds, dParams, sParams);
 
-    classStats(envId);
-    
+    classStats(envId, sParams);
+
     makeRatioGraphs(envId, groupCData, demData);
     makeIndividualGraphs(obsIds);
 
     $('.option-select').css('display', 'none');
     $('.report-body').css('visibility', 'visible');
   },
-   
+
   'click .classroom-selection': function(e) {
     envId = $(e.target).attr('data_id');
     obs = Observations.find({"envId": envId}).fetch();
@@ -206,7 +207,7 @@ Template.viewData.events({
    },
    //This should probably be a modal??
   'click .export-class-button': function(e){
-    
+
     var envId = $('.env-selection .chosen').attr('data_id');
     if(envId)
      {
@@ -275,58 +276,71 @@ Template.viewData.events({
       } else {
         alert("Please select a classroom to export!")
       }
-      
+
     }
 });
 
-function classStats(envId) {
+function renderStats(stats, data, name, total) {
+  var rowTwo = $('<div/>', {
+    class: "category-list",
+  }).appendTo(stats);
+
+  var sh = $('<h3/>', {
+    class: "stat-head title is-5",
+    text: name
+  }).appendTo(rowTwo);
+  var bullets4 = $('<ul/>', {
+    class: "stat-list"
+  }).appendTo(rowTwo);
+  for (key in data) {
+    var pct = (data[key] / total) * 100
+    var ac = $('<li/>', {
+      text: ""+key+": " + data[key] + " / "+ pct + "%",
+      class: "single-stat"
+    }).appendTo(bullets4)
+  }
+}
+
+
+function classStats(envId, sParams) {
   var studs = Subjects.find({"envId": envId}).fetch();
+  var conts = Sequences.find({'envId': envId}).fetch();
+
   var totalStuds = studs.length;
   var studTrack = new Set();
-  var studTalk = {};
-  var teachTalk = {};
-  var conts = Sequences.find({'envId': envId}).fetch();
   var totalCont = conts.length;
-  for (con in conts) {
-    var next = conts[con]['info'];
-    studTrack.add(next['studentId']);
-    if (next['Length of Talk']) {
-      if (next['Length of Talk'] in studTalk) {
-        studTalk[next['Length of Talk']] += 1;
-      } else {
-        studTalk[next['Length of Talk']] = 1;
-      }
-    }
-    if (next["Student Talk"]) {
-      if (next["Student Talk"] in studTalk) {
-        studTalk[next["Student Talk"]] += 1;
-      } else {
-        studTalk[next["Student Talk"]] = 1;
-      }
-    }
-    if (next["Teacher Solicitation"]) {
-      if (next["Teacher Solicitation"] in teachTalk) {
-        teachTalk[next["Teacher Solicitation"]] += 1;
-      } else {
-        teachTalk[next["Teacher Solicitation"]] = 1;
-      }
-    } else if (next["Teacher Solicitation"]) { // Eliminate later!!
-      if (next["Teacher Solicitation"] in teachTalk) {
-        teachTalk[next["Teacher Solicitation"]] += 1;
-      } else {
-        teachTalk[next["Teacher Solicitation"]] = 1;
-      }
-    } 
-  }
-
   var stats = $('.class-stats');
+
+  var classRoomSummary = $('<div/>', {
+      class: "category-summary",
+  }).appendTo(stats);
   var fh = $('<h3/>', {
     class: "stat-head title is-5",
     text: "Classroom Summary"
-  }).appendTo(stats);
+  }).appendTo(classRoomSummary);
+
+  sParams.map(function(param) {
+    var newObject = {};
+    for (con in conts) {
+      var next = conts[con]['info'];
+      studTrack.add(next['studentId']);
+      if (next[param]) {
+        if (next[param] in newObject) {
+          newObject[next[param]] += 1;
+        } else {
+          newObject[next[param]] = 1;
+        }
+      }
+    }
+    var name = param;
+    var total = studTrack.size;
+    renderStats(stats, newObject, name, total);
+    newObject = {};
+  });
+
   var bullets = $('<ul/>', {
     class: "stat-list"
-  }).appendTo(stats);
+  }).appendTo(classRoomSummary);
   var tc = $('<li/>', {
     text: "Students who Contributed: "+studTrack.size,
     class: "single-stat"
@@ -348,42 +362,6 @@ function classStats(envId) {
     text: "Contributions per student: "+parseFloat(totalCont/studTrack.size).toFixed(2),
     class: "single-stat"
   }).appendTo(bullets)
-
-  if (!$.isEmptyObject(teachTalk)) {
-
-    var sh = $('<h3/>', {
-      class: "stat-head title is-5",
-      text: "Teacher Solicitation"
-    }).appendTo(stats);
-    var bullets2 = $('<ul/>', {
-      class: "stat-list"
-    }).appendTo(stats);
-    for (key in teachTalk) {
-      var ac = $('<li/>', {
-        text: ""+key+": "+teachTalk[key],
-        class: "single-stat"
-      }).appendTo(bullets2)
-    }
-  }
-
-  if (!$.isEmptyObject(studTalk)) {
-    var th = $('<h3/>', {
-      class: "stat-head title is-5",
-      text: "Student Talk Type and Length"
-    }).appendTo(stats);
-    var bullets3 = $('<ul/>', {
-      class: "stat-list"
-    }).appendTo(stats);
-    for (key in studTalk) {
-      var ac = $('<li/>', {
-        text: ""+key+": "+studTalk[key],
-        class: "single-stat"
-      }).appendTo(bullets3)
-    }
-  }
-
-
-  //Append to .class-stats
 }
 
 function makeDemGraphs(env, dparams) {
@@ -400,7 +378,7 @@ function makeDemGraphs(env, dparams) {
       }
     }
   }
-  
+
   for (key in data){
     makePieChart(d3.entries(data[key]), key);
   }
@@ -460,7 +438,7 @@ function makeRatioGraphs(envId, cData, dData) {
   var statData = {};
   var total = d3.sum(d3.values(dData[d3.keys(dData)[0]]))
   var allParams = SubjectParameters.findOne({"children.envId": envId});
-    
+
   for (key in dData) {
     statData[key] = dData[key];
     d3.keys(statData[key]).map(function (k, i) { statData[key][k] /= total });
@@ -506,7 +484,6 @@ function makeRatioGraphs(envId, cData, dData) {
 }
 
 function makeIndividualGraphs(oIds) {
-
   var contribs = {};
   for (id in oIds) {
     var nc = Sequences.find({"obsId": oIds[id]}).fetch();
@@ -519,7 +496,6 @@ function makeIndividualGraphs(oIds) {
       }
     }
   }
-
 
   data = d3.entries(contribs);
   data = _(data).sortBy('value')
@@ -636,7 +612,6 @@ function makePieChart(data, label) {
 
 function makeStackedBar(dataEnum, label, selector, yLabel) {
 
-
   var margin = {top: 50, right: 20, bottom: 30, left: 40},
     width = 600 - margin.left - margin.right,
     height = 500 - margin.top - margin.bottom,
@@ -647,7 +622,7 @@ function makeStackedBar(dataEnum, label, selector, yLabel) {
             .append("svg")
             .attr('width', fullW)
             .attr('height', fullH);
-    
+
   g = svg.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
   // BarChart Axes
@@ -677,22 +652,31 @@ function makeStackedBar(dataEnum, label, selector, yLabel) {
   x0.domain(dataEnum.map(function(d) { return d.key; }));
   x1.domain(keys).rangeRound([0, x0.bandwidth()]);
 
-  y.domain([-.001, 1.25*d3.max(dataEnum, function(d) { return d3.max(keys, function(key) { return d.value[key]; }); })]).nice();
-
+  y.domain([0, 1.25*d3.max(dataEnum, function(d) { return d3.max(keys, function(key) { return d.value[key]; }); })]).nice();
 
   g.append("g")
     .selectAll("g")
     .data(dataEnum)
     .enter().append("g")
       .attr("transform", function(d) { return "translate(" + x0(d.key) + ",0)"; })
+      .attr('class', "bar-chart")
     .selectAll("rect")
-    .data(function(d) { return keys.map(function(key) { val = d.value[key] || 0; return {key: key, value: val} }) })
+    .data(function(d) { return keys.map(function(key) { val = d.value[key] || .01; return {key: key, value: val} }) })
     .enter().append("rect")
+      .attr('class', 'rect')
       .attr("x", function(d) { return x1(d.key); })
       .attr("y", function(d) { return y(d.value); })
       .attr("width", x1.bandwidth())
       .attr("height", function(d) { return height - y(d.value); })
-      .attr("fill", function(d) { return z(d.key); });
+      .attr("fill", function(d) { return z(d.key); })
+      .enter().append("g")
+      .attr("font-size", "20px")
+      .data(function(d) { return keys.map(function(key) { val = d.value[key] || 0; return {key: key, value: val} }) })
+      .enter().append("text")
+      .text(function(d) { if (d.value == 0) return d.value })
+        .attr("x", function(d) { return x1(d.key); })
+        .attr("y", function(d) { return y(d.value) - 10; })
+        .attr("width", x1.bandwidth())
 
   g.append("g")
       .attr("class", "axis")
